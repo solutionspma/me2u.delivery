@@ -20,4 +20,6 @@ Apply `migrations/001_initial_platform.sql` through the approved database migrat
 - `POST /api/v1/deliveries` — creates a delivery request after server-side role and tenant checks.
 - `POST /api/v1/deliveries/:id/transition` — validates delivery state transitions and blocks required-verification deliveries from reaching `DELIVERED` without a passed assertion.
 
-The request-header session adapter is deliberately a local development seam. Before production enablement it must be replaced with verified YAHBASE JWT/session claims, and repository persistence/event writes must be enabled for every mutation.
+Production authentication uses a YAHBASE bearer JWT (`/auth/me`) and resolves Me2U memberships from PostgreSQL. Header identity is available only when `ME2U_TEST_AUTH=true` outside production for automated tests.
+
+Phase 2 operational routes include delivery creation/listing, tenant-scoped dispatch assignment, courier transitions, YAHBASE-backed POD upload metadata, courier tracking ingestion, persisted verification assertions, and tokenized customer-safe tracking. Apply migrations `001_initial_platform.sql` and `002_operational_fields.sql` in order.
