@@ -1,0 +1,2 @@
+const base = process.env.YAHBASE_API_BASE ?? "https://yahbase.com";
+export async function yahbase<T>(path: string, init: RequestInit = {}): Promise<T> { const key = process.env.YAHBASE_SERVER_API_KEY; if (!key) throw new Error("YAHBASE_SERVER_API_KEY is not configured"); const response = await fetch(`${base}${path}`, { ...init, headers: { "content-type":"application/json", "x-api-key":key, ...(init.headers ?? {}) }, cache:"no-store" }); if (!response.ok) throw new Error(`YAHBASE request failed: ${response.status}`); return response.json() as Promise<T>; }
