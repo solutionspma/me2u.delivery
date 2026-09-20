@@ -1,0 +1,3 @@
+"use client";
+import { useState } from "react";
+export function AddToCartButton({merchantId,productId}:{merchantId:string;productId:string}){const [state,setState]=useState<"idle"|"added"|"error">("idle");async function add(){setState("idle");const response=await fetch("/api/v1/cart",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({merchantId,productId,quantity:1,modifiers:[]})});if(response.status===401||response.status===403){window.location.assign(`/login?next=${encodeURIComponent(window.location.pathname)}`);return;}setState(response.ok?"added":"error");}return <button className="add-button" onClick={add} aria-label="Add to cart">{state==="added"?"✓":state==="error"?"!":"+"}</button>}
