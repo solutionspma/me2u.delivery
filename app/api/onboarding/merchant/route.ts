@@ -1,0 +1,5 @@
+import { z } from "zod";
+import { responseError, responseOk } from "../../../../lib/api";
+import { provisionMerchant, registerIdentity } from "../../../../lib/registration";
+const schema=z.object({businessName:z.string().min(2).max(160),contactName:z.string().min(2).max(120),email:z.string().email(),password:z.string().min(8),phone:z.string().min(7).max(40)});
+export async function POST(request:Request){try{const input=schema.parse(await request.json());const identity=await registerIdentity({email:input.email,password:input.password,name:input.contactName,orgName:input.businessName});const application=await provisionMerchant({userId:identity.user!.id,email:input.email,name:input.contactName,businessName:input.businessName,contact:{phone:input.phone,email:input.email}});const response=responseOk({application},201);response.headers.append("set-cookie",`me2u_session=${identity.token}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=604800`);return response;}catch(error){return responseError(error);}}

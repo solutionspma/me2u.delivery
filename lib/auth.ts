@@ -9,7 +9,7 @@ const mapRole = (role: string | undefined): Role | null => { const normalized = 
 export async function authenticateRequest(request: Request): Promise<Session> {
   const correlationId = request.headers.get("x-request-id") ?? crypto.randomUUID();
   const demoCookie=request.headers.get("cookie")?.match(/(?:^|;\s*)me2u_demo=(customer|merchant|courier)/)?.[1];
-  if (process.env.ME2U_DEMO_MODE === "true" && demoCookie) return demoSession(demoCookie as "customer"|"merchant"|"courier",correlationId);
+  if (process.env.NODE_ENV !== "production" && process.env.ME2U_DEMO_MODE === "true" && demoCookie) return demoSession(demoCookie as "customer"|"merchant"|"courier",correlationId);
   const bearer = request.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1] ?? request.headers.get("cookie")?.match(/(?:^|;\s*)me2u_session=([^;]+)/)?.[1];
   if (!bearer) {
     if (process.env.NODE_ENV !== "production" && process.env.ME2U_TEST_AUTH === "true") return testSession(request.headers, correlationId);
