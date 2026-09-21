@@ -60,7 +60,11 @@ export class PitchAgencyDataAxleProvider implements MerchantDiscoveryProvider {
   private async call(path: string, body: Record<string, unknown>) {
     if (!this.base || !this.token) throw new ApiError("DISCOVERY_PROVIDER_NOT_CONFIGURED", 503);
     const response = await fetch(`${this.base.replace(/\/$/, "")}${path}`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${this.token}`, "x-me2u-capabilities": "business.discovery" }, body: JSON.stringify(body), cache: "no-store" });
-    if (!response.ok) throw new ApiError("DISCOVERY_PROVIDER_UNAVAILABLE", 503);
+    if (!response.ok) {
+      const failure = await response.json().catch(() => ({})) as { error?: unknown };
+      const code = typeof failure.error === "string" && /^[A-Z0-9_]+$/.test(failure.error) ? failure.error : "DISCOVERY_PROVIDER_UNAVAILABLE";
+      throw new ApiError(code, response.status >= 500 ? 503 : response.status);
+    }
     const payload = await response.json() as { candidates?: Array<Record<string, unknown>>; leads?: Array<Record<string, unknown>> };
     return (payload.candidates ?? payload.leads ?? []).map((record) => {
       const displayName = String(record.businessName ?? record.company ?? "Unknown business");
