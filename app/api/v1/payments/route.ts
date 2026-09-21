@@ -1,0 +1,8 @@
+import { z } from "zod";
+import { authenticateRequest, requireRole } from "../../../../lib/auth";
+import { responseError, responseOk } from "../../../../lib/api";
+import { db } from "../../../../lib/db";
+import { recordPayment } from "../../../../lib/phase4";
+import { StripeTestProvider } from "../../../../lib/stripe";
+const schema=z.object({orderId:z.string().uuid(),deliveryId:z.string().uuid(),amountCents:z.number().int().positive(),currency:z.string().length(3).default("USD"),paymentMethodId:z.string().min(3),idempotencyKey:z.string().min(8).max(200)});
+export async function POST(request:Request){try{const session=await authenticateRequest(request);requireRole(session,["CUSTOMER"]);const input=schema.parse(await request.json());const order=await db().query("SELECT id,total_cents FROM commerce_order WHERE id=$1 AND tenant_id=$2 AND customer_user_id=$3",[input.orderId,session.tenantId,session.userId]);if(!order.rows[0]||Number(order.rows[0].total_cents)!==input.amountCents) throw new Error("PAYMENT_AMOUNT_MISMATCH");const result=await new StripeTestProvider().authorizeWithPaymentMethod({...input,reference:input.orderId});const payment=await recordPayment(session,{orderId:input.orderId,deliveryId:input.deliveryId,provider:"STRIPE_TEST",providerTransactionRef:result.providerReference,idempotencyKey:input.idempotencyKey,amountCents:input.amountCents,status:result.status,metadata:{currency:input.currency}});return responseOk({paymentId:payment.id,providerReference:result.providerReference,status:result.status,clientSecret:result.clientSecret},201,session.correlationId);}catch(error){return responseError(error);}}

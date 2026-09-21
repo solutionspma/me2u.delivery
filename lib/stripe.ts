@@ -1,0 +1,15 @@
+import { createHash } from "crypto";
+import type { PaymentProvider, PaymentStatus } from "./payments";
+
+type StripeResult={providerReference:string;status:PaymentStatus;clientSecret?:string};
+const statusMap=(status:string):PaymentStatus=>status === "succeeded" ? "CAPTURED" : status === "requires_capture" ? "AUTHORIZED" : status === "canceled" ? "VOIDED" : status === "requires_action" ? "AUTHORIZED" : "FAILED";
+export class StripeTestProvider implements PaymentProvider {
+  private key(){const key=process.env.STRIPE_SECRET_KEY;if(!key || !key.startsWith("sk_test_")) throw new Error("STRIPE_TEST_KEY_NOT_CONFIGURED");return key;}
+  private async call(path:string,body:Record<string,string>,idempotency?:string){const response=await fetch(`https://api.stripe.com/v1/${path}`,{method:"POST",headers:{authorization:`Bearer ${this.key()}`,"content-type":"application/x-www-form-urlencoded",...(idempotency?{"Idempotency-Key":idempotency}:{})},body:new URLSearchParams(body),cache:"no-store"});const json=await response.json() as {id?:string;status?:string;client_secret?:string;error?:{message?:string}};if(!response.ok || !json.id) throw new Error(json.error?.message ?? "STRIPE_REQUEST_FAILED");return json;}
+  async authorize(input:{amountCents:number;currency:string;reference:string}):Promise<StripeResult>{const result=await this.call("payment_intents",{amount:String(input.amountCents),currency:input.currency.toLowerCase(),capture_method:"manual",metadata_order_reference:input.reference},createHash("sha256").update(input.reference).digest("hex"));return {providerReference:result.id!,status:statusMap(result.status ?? ""),clientSecret:result.client_secret};}
+  async authorizeWithPaymentMethod(input:{amountCents:number;currency:string;reference:string;paymentMethodId:string}){const result=await this.call("payment_intents",{amount:String(input.amountCents),currency:input.currency.toLowerCase(),payment_method:input.paymentMethodId,confirm:"true",capture_method:"manual",metadata_order_reference:input.reference},createHash("sha256").update(input.reference).digest("hex"));return {providerReference:result.id!,status:statusMap(result.status ?? ""),clientSecret:result.client_secret};}
+  async capture(providerReference:string){const result=await this.call(`payment_intents/${providerReference}/capture`,{});return {status:statusMap(result.status ?? "")};}
+  async refund(providerReference:string,amountCents:number){const result=await this.call("refunds",{payment_intent:providerReference,amount:String(amountCents)});return {status:(result.status === "succeeded" ? "REFUNDED" : "FAILED") as PaymentStatus};}
+  async void(providerReference:string){const result=await this.call(`payment_intents/${providerReference}/cancel`,{});return {status:statusMap(result.status ?? "")};}
+  async status(providerReference:string){const response=await fetch(`https://api.stripe.com/v1/payment_intents/${providerReference}`,{headers:{authorization:`Bearer ${this.key()}`},cache:"no-store"});const result=await response.json() as {status?:string};return {status:statusMap(result.status ?? "")};}
+}
