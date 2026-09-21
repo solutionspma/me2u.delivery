@@ -52,14 +52,14 @@ export class MapboxDiscoveryProvider implements MerchantDiscoveryProvider {
   findPossibleRelatedLocations(candidate: DiscoveredBusiness) { return this.request(candidate.displayName); }
 }
 
-export class PitchAgencyDataAxleProvider implements MerchantDiscoveryProvider {
-  name = "PITCH_AGENCY_DATAXLE";
+export class PitchAgencyStoredIntelligenceProvider implements MerchantDiscoveryProvider {
+  name = "PITCH_AGENCY_STORED_INTELLIGENCE";
   private base = process.env.PITCH_AGENCY_BASE_URL;
   private token = process.env.PITCH_AGENCY_SERVICE_TOKEN;
   private path = process.env.PITCH_AGENCY_DISCOVERY_PATH ?? "/api/integrations/v1/business-discovery";
   private async call(path: string, body: Record<string, unknown>) {
     if (!this.base || !this.token) throw new ApiError("DISCOVERY_PROVIDER_NOT_CONFIGURED", 503);
-    const response = await fetch(`${this.base.replace(/\/$/, "")}${path}`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${this.token}`, "x-me2u-capabilities": "business.discovery" }, body: JSON.stringify(body), cache: "no-store" });
+    const response = await fetch(`${this.base.replace(/\/$/, "")}${path}`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${this.token}`, "x-me2u-capabilities": "business.discovery.read" }, body: JSON.stringify(body), cache: "no-store" });
     if (!response.ok) {
       const failure = await response.json().catch(() => ({})) as { error?: unknown };
       const code = typeof failure.error === "string" && /^[A-Z0-9_]+$/.test(failure.error) ? failure.error : "DISCOVERY_PROVIDER_UNAVAILABLE";
@@ -67,9 +67,9 @@ export class PitchAgencyDataAxleProvider implements MerchantDiscoveryProvider {
     }
     const payload = await response.json() as { candidates?: Array<Record<string, unknown>>; leads?: Array<Record<string, unknown>> };
     return (payload.candidates ?? payload.leads ?? []).map((record) => {
-      const displayName = String(record.businessName ?? record.company ?? "Unknown business");
-      const address = { addressLine1: record.address, city: record.city, state: record.state, postalCode: record.postalCode, formatted: [record.address, record.city, record.state, record.postalCode].filter(Boolean).join(", ") };
-      return { displayName, normalizedName: normalize(displayName), phone: record.phone ? String(record.phone) : undefined, website: record.website ? String(record.website) : undefined, address, latitude: typeof record.latitude === "number" ? record.latitude : undefined, longitude: typeof record.longitude === "number" ? record.longitude : undefined, category: record.industry ? String(record.industry) : undefined, provider: this.name, sourceRecordId: String(record.id ?? `${displayName}:${address.formatted}`), raw: record, confidence: 0.9 };
+      const displayName = String(record.business_name ?? record.businessName ?? record.company ?? "Unknown business");
+      const address = { addressLine1: record.address, city: record.city, state: record.state, postalCode: record.postal_code ?? record.postalCode, formatted: [record.address, record.city, record.state, record.postal_code ?? record.postalCode].filter(Boolean).join(", ") };
+      return { displayName, normalizedName: normalize(displayName), phone: record.phone ? String(record.phone) : undefined, website: record.website ? String(record.website) : undefined, address, latitude: typeof record.latitude === "number" ? record.latitude : undefined, longitude: typeof record.longitude === "number" ? record.longitude : undefined, category: record.industry ? String(record.industry) : undefined, provider: this.name, sourceRecordId: String(record.source_record_id ?? record.sourceRecordId ?? record.id ?? `${displayName}:${address.formatted}`), raw: record, confidence: typeof record.confidence === "number" ? record.confidence : 0.9 };
     });
   }
   searchBusinesses(query: string) { return this.call(this.path, { query, limit: 100 }); }
@@ -81,7 +81,7 @@ export class PitchAgencyDataAxleProvider implements MerchantDiscoveryProvider {
 
 export function configuredDiscoveryProviders(): MerchantDiscoveryProvider[] {
   const providers: MerchantDiscoveryProvider[] = [];
-  if (process.env.PITCH_AGENCY_BASE_URL && process.env.PITCH_AGENCY_SERVICE_TOKEN) providers.push(new PitchAgencyDataAxleProvider());
+  if (process.env.PITCH_AGENCY_BASE_URL && process.env.PITCH_AGENCY_SERVICE_TOKEN) providers.push(new PitchAgencyStoredIntelligenceProvider());
   if (process.env.MAPBOX_ACCESS_TOKEN) providers.push(new MapboxDiscoveryProvider());
   return providers;
 }
