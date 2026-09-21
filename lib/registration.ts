@@ -30,7 +30,7 @@ export async function provisionMerchant(input:{userId:string;email:string;name:s
       step = "organization";
       await client.query("INSERT INTO organization(id,name,slug) VALUES($1,$2,$3)", [orgId, input.businessName, `merchant-${input.userId}`]);
       step = "tenant";
-      await client.query("INSERT INTO tenant(id,organization_id,name,slug,environment) VALUES($1,$2,$3,$4,'production')", [tenantId, input.businessName, `merchant-${input.userId}`]);
+      await client.query("INSERT INTO tenant(id,organization_id,name,slug,environment) VALUES($1,$2,$3,$4,'production')", [tenantId, orgId, input.businessName, `merchant-${input.userId}`]);
       step = "membership";
       await client.query("INSERT INTO membership(tenant_id,user_id,role) VALUES($1,$2,'MERCHANT_OWNER') ON CONFLICT DO NOTHING", [tenantId, input.userId]);
       step = "merchant_application";
