@@ -52,26 +52,32 @@ export class MapboxDiscoveryProvider implements MerchantDiscoveryProvider {
   findPossibleRelatedLocations(candidate: DiscoveredBusiness) { return this.request(candidate.displayName); }
 }
 
-export class PitchIntelligenceProvider implements MerchantDiscoveryProvider {
-  name = "PITCH_INTELLIGENCE";
-  private base = process.env.PITCH_INTELLIGENCE_BASE_URL;
+export class PitchAgencyDataAxleProvider implements MerchantDiscoveryProvider {
+  name = "PITCH_AGENCY_DATAXLE";
+  private base = process.env.PITCH_AGENCY_BASE_URL;
+  private token = process.env.PITCH_AGENCY_ADMIN_JWT;
+  private path = process.env.PITCH_AGENCY_DISCOVERY_PATH ?? "/api/admin/pie/data-axle";
   private async call(path: string, body: Record<string, unknown>) {
-    if (!this.base) throw new ApiError("DISCOVERY_PROVIDER_NOT_CONFIGURED", 503);
-    const response = await fetch(`${this.base.replace(/\/$/, "")}${path}`, { method: "POST", headers: { "content-type": "application/json", ...(process.env.PITCH_INTELLIGENCE_API_KEY ? { "x-api-key": process.env.PITCH_INTELLIGENCE_API_KEY } : {}) }, body: JSON.stringify(body), cache: "no-store" });
+    if (!this.base || !this.token) throw new ApiError("DISCOVERY_PROVIDER_NOT_CONFIGURED", 503);
+    const response = await fetch(`${this.base.replace(/\/$/, "")}${path}`, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${this.token}` }, body: JSON.stringify(body), cache: "no-store" });
     if (!response.ok) throw new ApiError("DISCOVERY_PROVIDER_UNAVAILABLE", 503);
-    const payload = await response.json() as { businesses?: DiscoveredBusiness[] };
-    return payload.businesses ?? [];
+    const payload = await response.json() as { leads?: Array<Record<string, unknown>> };
+    return (payload.leads ?? []).map((record) => {
+      const displayName = String(record.businessName ?? record.company ?? "Unknown business");
+      const address = { addressLine1: record.address, city: record.city, state: record.state, postalCode: record.postalCode, formatted: [record.address, record.city, record.state, record.postalCode].filter(Boolean).join(", ") };
+      return { displayName, normalizedName: normalize(displayName), phone: record.phone ? String(record.phone) : undefined, website: record.website ? String(record.website) : undefined, address, latitude: typeof record.latitude === "number" ? record.latitude : undefined, longitude: typeof record.longitude === "number" ? record.longitude : undefined, category: record.industry ? String(record.industry) : undefined, provider: this.name, sourceRecordId: String(record.id ?? `${displayName}:${address.formatted}`), raw: record, confidence: 0.9 };
+    });
   }
-  searchBusinesses(query: string) { return this.call("/businesses/search", { query }); }
-  getBusinessDetails(sourceRecordId: string) { return this.call("/businesses/details", { sourceRecordId }).then((items) => items[0] ?? null); }
-  searchNearby(latitude: number, longitude: number, query?: string) { return this.call("/businesses/nearby", { latitude, longitude, query }); }
-  resolveLocation(query: string) { return this.call("/businesses/resolve", { query }).then((items) => items[0] ?? null); }
-  findPossibleRelatedLocations(candidate: DiscoveredBusiness) { return this.call("/businesses/related", { candidate }); }
+  searchBusinesses(query: string) { return this.call(this.path, { action: "search", keyword: query, limit: 100 }); }
+  getBusinessDetails(sourceRecordId: string) { return this.call(this.path, { action: "search", keyword: sourceRecordId, limit: 10 }).then((items) => items[0] ?? null); }
+  searchNearby(latitude: number, longitude: number, query?: string) { return this.call(this.path, { action: "search", keyword: query, latitude, longitude, limit: 100 }); }
+  resolveLocation(query: string) { return this.searchBusinesses(query).then((items) => items[0] ?? null); }
+  findPossibleRelatedLocations(candidate: DiscoveredBusiness) { return this.searchBusinesses(candidate.displayName); }
 }
 
 export function configuredDiscoveryProviders(): MerchantDiscoveryProvider[] {
   const providers: MerchantDiscoveryProvider[] = [];
-  if (process.env.PITCH_INTELLIGENCE_BASE_URL) providers.push(new PitchIntelligenceProvider());
+  if (process.env.PITCH_AGENCY_BASE_URL && process.env.PITCH_AGENCY_ADMIN_JWT) providers.push(new PitchAgencyDataAxleProvider());
   if (process.env.MAPBOX_ACCESS_TOKEN) providers.push(new MapboxDiscoveryProvider());
   return providers;
 }
